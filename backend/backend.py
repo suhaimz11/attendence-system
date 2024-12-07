@@ -25,7 +25,7 @@ def get_attendance():
         return jsonify({"message": "Attendance file not found"}), 404
     return jsonify(attendance_data)
 
-# Endpoint: Upload face data
+# Endpoint: Upload face data (for registering faces)
 @app.route('/api/upload-face', methods=['POST'])
 def upload_face():
     if 'file' not in request.files:
@@ -39,6 +39,23 @@ def upload_face():
         filename = secure_filename(file.filename)
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         return jsonify({"message": f"File {filename} uploaded successfully"}), 200
+
+# Endpoint: Start attendance (Mark attendance)
+@app.route('/api/start-attendance', methods=['POST'])
+def start_attendance():
+    data = request.get_json()
+    student_id = data.get('student_id')
+    timestamp = data.get('timestamp')
+
+    if not student_id or not timestamp:
+        return jsonify({"message": "Invalid data"}), 400
+
+    # Append attendance to CSV file
+    with open(ATTENDANCE_FILE, mode='a', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=['student_id', 'timestamp'])
+        writer.writerow({'student_id': student_id, 'timestamp': timestamp})
+
+    return jsonify({"message": "Attendance marked successfully"}), 200
 
 # Endpoint: Serve registered face images (optional for debugging)
 @app.route('/api/registered-faces/<filename>', methods=['GET'])

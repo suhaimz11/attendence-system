@@ -2,6 +2,8 @@ from flask import Flask, jsonify, request, send_file
 import os
 import csv
 from werkzeug.utils import secure_filename
+import subprocess  # To run Python scripts
+import json
 
 app = Flask(__name__)
 
@@ -25,7 +27,7 @@ def get_attendance():
         return jsonify({"message": "Attendance file not found"}), 404
     return jsonify(attendance_data)
 
-# Endpoint: Upload face data (for registering faces)
+# Endpoint: Upload face data (for registration)
 @app.route('/api/upload-face', methods=['POST'])
 def upload_face():
     if 'file' not in request.files:
@@ -38,24 +40,31 @@ def upload_face():
     if file:
         filename = secure_filename(file.filename)
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        return jsonify({"message": f"File {filename} uploaded successfully"}), 200
 
-# Endpoint: Start attendance (Mark attendance)
+        # Run the face registration script
+        try:
+            subprocess.run(["python", "face_registration.py", filename], check=True)
+            return jsonify({"message": f"File {filename} uploaded and face registered successfully"}), 200
+        except subprocess.CalledProcessError:
+            return jsonify({"message": "Error registering face"}), 500
+
+# Endpoint: Start attendance (using face recognition)
 @app.route('/api/start-attendance', methods=['POST'])
 def start_attendance():
-    data = request.get_json()
-    student_id = data.get('student_id')
-    timestamp = data.get('timestamp')
-
-    if not student_id or not timestamp:
-        return jsonify({"message": "Invalid data"}), 400
-
-    # Append attendance to CSV file
-    with open(ATTENDANCE_FILE, mode='a', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=['student_id', 'timestamp'])
-        writer.writerow({'student_id': student_id, 'timestamp': timestamp})
-
-    return jsonify({"message": "Attendance marked successfully"}), 200
+    student_id = request.json.get('student_id')
+    if not student_id:
+        return jsonify({"message": "Student ID is required"}), 400
+    
+    try:
+        # Run the face recognition attendance script
+        result = subprocess.run(
+            ["python", "face_recognition_attendance.py", student_id],
+            capture_output=True, text=True, check=True
+        )
+        # Assuming the script outputs a success message, we return it.
+        return jsonify({"message": result.stdout.strip()}), 200
+    except subprocess.CalledProcessError as e:
+        return jsonify({"message": f"Error processing attendance: {e.stderr}"}), 500
 
 # Endpoint: Serve registered face images (optional for debugging)
 @app.route('/api/registered-faces/<filename>', methods=['GET'])
